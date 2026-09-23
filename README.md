@@ -52,6 +52,8 @@ pi install git:github.com/damian87x/jev-browser-use      # user-wide
 pi install -l git:github.com/damian87x/jev-browser-use   # this project only
 ```
 
+Headless `pi -p` with a project-local (`-l`) install needs `-a` to trust the project's files. Without it, pi waits silently on the trust prompt.
+
 **Once per machine, for both**
 
 ```bash
