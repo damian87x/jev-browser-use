@@ -1,0 +1,12 @@
+{
+  "name": "jev-browser-use",
+  "owner": {"name": "Damian Borek"},
+  "metadata": {"description": "Jev Ultrafast browser skill for Claude Code."},
+  "plugins": [
+    {
+      "name": "jev-browser-use",
+      "source": "./",
+      "description": "Drive a web page with Jev Ultrafast: host allowlist, step budget, caller-supplied text, independent pass check."
+    }
+  ]
+}

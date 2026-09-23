@@ -1,0 +1,14 @@
+jev-browser-use
+Copyright (c) 2026 Damian Borek
+
+The skill (skills/jev-browser-use/SKILL.md), its runner
+(skills/jev-browser-use/scripts/jev_browser_agent.py) and the runner tests are derived from
+the jev-browser-use skill in hermes-jev-skills by Steve Darlow, used under the MIT License:
+https://github.com/kerpopule/hermes-jev-skills
+
+Changes in this repository: caller-supplied typed values (--text, needs_text), key lookup
+from the nearest .env and pi's secret file, the jev.browser_use_run_v1 result tag, and
+Claude Code plugin / pi package manifests.
+
+Jev Ultrafast (https://github.com/browser-use/jev-ultrafast, MIT, Browser Use) is not
+included. The runner imports it from a separate checkout.

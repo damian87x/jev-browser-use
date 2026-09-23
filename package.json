@@ -1,0 +1,14 @@
+{
+  "name": "jev-browser-use",
+  "version": "0.1.0",
+  "description": "Fast browser QA for pi: TypeSafe Jev picks every click through Jev Ultrafast, you supply the text and the pass condition, the page is checked independently.",
+  "license": "MIT",
+  "author": "Damian Borek",
+  "homepage": "https://github.com/damian87x/jev-browser-use#readme",
+  "repository": {"type": "git", "url": "git+https://github.com/damian87x/jev-browser-use.git"},
+  "bugs": {"url": "https://github.com/damian87x/jev-browser-use/issues"},
+  "keywords": ["pi-package", "jev", "typesafe", "browser-use", "jev-ultrafast", "qa"],
+  "files": ["skills/", "README.md", "LICENSE", "NOTICE", ".env.example"],
+  "pi": {"skills": ["./skills"]},
+  "scripts": {"test": "python3 -m unittest discover -s tests"}
+}
