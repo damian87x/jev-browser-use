@@ -1,6 +1,6 @@
 {
   "name": "jev-browser-use",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Fast browser QA for pi: TypeSafe Jev picks every click through Jev Ultrafast, you supply the text and the pass condition, the page is checked independently.",
   "license": "MIT",
   "author": "Damian Borek",

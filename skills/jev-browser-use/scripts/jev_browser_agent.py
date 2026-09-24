@@ -163,6 +163,32 @@ def outcome_verified(title: str, heading: str, url: str, expect: str) -> bool:
     return expect.lower() in haystack
 
 
+READ_FIELDS = """JSON.stringify(Object.fromEntries(
+  [...document.querySelectorAll('input:not([type]),input[type=text],input[type=email],input[type=tel],'
+     + 'input[type=number],input[type=search],input[type=url],textarea,select')]
+    .filter(e => e.offsetParent !== null)
+    .map(e => [((e.getAttribute('aria-label') || (e.labels && e.labels[0] && e.labels[0].innerText)
+                 || e.placeholder || e.name || e.id || '') + '').trim(), e.value])))"""
+
+
+def fields_match(observed: dict, expected: list[tuple[str, str]]) -> tuple[bool, dict]:
+    """Check live field values by label: exact label first, else exactly one containing it."""
+    report = {}
+    for name, value in expected:
+        exact = [label for label in observed if label.lower() == name.lower()]
+        contained = [label for label in observed if name.lower() in label.lower()]
+        match = exact or (contained if len(contained) == 1 else [])
+        report[name] = bool(match) and observed[match[0]] == value
+    return bool(expected) and all(report.values()), report
+
+
+def run_verified(title: str, heading: str, url: str, expect: str, fields_ok: bool | None) -> bool:
+    """Pass only on independent evidence: --expect text and/or --expect-field values."""
+    if not expect and fields_ok is None:
+        return False
+    return (not expect or outcome_verified(title, heading, url, expect)) and fields_ok is not False
+
+
 # ── browser ownership ────────────────────────────────────────────────────────
 
 def find_chrome(env: Mapping[str, str] | None = None) -> str | None:
@@ -314,6 +340,42 @@ def start_owned_browser(args) -> "OwnedChrome":
     return owned
 
 
+# ── page timing ──────────────────────────────────────────────────────────────
+
+def wait_until_settled(read, quiet_s: float = 1.0, cap_s: float = 5.0,
+                       clock=time.monotonic, sleep=time.sleep) -> bool:
+    """Poll ``read`` until its value is unchanged for ``quiet_s``; give up at ``cap_s``.
+
+    A site builder can still be hydrating when the first decision lands, so the
+    executor rejects the action as stale and the run drifts. Returns True when settled.
+    """
+    start = clock()
+    last = read()
+    stable_since = start
+    while clock() - start < cap_s:
+        sleep(0.1)
+        current = read()
+        if current != last:
+            last, stable_since = current, clock()
+        elif clock() - stable_since >= quiet_s:
+            return True
+    return False
+
+
+def wait_for_change(read, before, cap_s: float = 1.5, clock=time.monotonic, sleep=time.sleep) -> bool:
+    """Poll ``read`` until it differs from ``before``; give up at ``cap_s``.
+
+    Jev Ultrafast scrolls with a synthetic wheel event and observes right away. Some
+    sites apply the scroll about a second later, so Jev would see an unmoved page.
+    """
+    start = clock()
+    while read() == before:
+        if clock() - start >= cap_s:
+            return False
+        sleep(0.05)
+    return True
+
+
 # ── caller-supplied text ─────────────────────────────────────────────────────
 
 class MissingText(Exception):
@@ -400,6 +462,15 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Value to type when Jev picks the field with this label. Repeatable. "
                         "Stays local; without it (and without a text model key) the run stops "
                         "and names the field in needs_text.")
+    p.add_argument("--expect-field", action="append", default=[], metavar="LABEL=VALUE",
+                   help="Field that must hold this value on the live page to PASS. Repeatable. "
+                        "Use it for forms, where title/heading/URL do not change.")
+    p.add_argument("--settle-max-ms", type=int, default=5000,
+                   help="Before the first decision, wait until the page stops changing for 1 s, "
+                        "at most this long (default 5000; 0 disables).")
+    p.add_argument("--scroll-wait-ms", type=int, default=1500,
+                   help="After a scroll, wait until the page has actually moved, at most this long "
+                        "(default 1500; 0 disables).")
     p.add_argument("--json", action="store_true", help="Emit a machine-readable result as the last line.")
     return p
 
@@ -426,6 +497,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         text_values = parse_text_values(args.text)
+        expect_fields = parse_text_values(args.expect_field)
     except ValueError as exc:
         print(f"FAIL: {exc}")
         return 2
@@ -456,8 +528,26 @@ def main(argv: list[str] | None = None) -> int:
     ticks = 0
     left_allowlist = False
     needs_text = None
+    settled = None
     final_url = title = heading = ""
     with Agent(args.url, args.goal) as agent:
+        if args.settle_max_ms > 0:
+            from jev_ultrafast.browser import MARKER
+            settled = wait_until_settled(lambda: agent.browser.evaluate(MARKER), cap_s=args.settle_max_ms / 1000)
+            agent.state["page"] = agent.browser.observe(screenshot=False)
+            print(f"  page {'settled' if settled else 'still changing at the cap'} before the first decision")
+        if args.scroll_wait_ms > 0:
+            execute = agent.browser.act
+
+            def act_then_wait_for_scroll(action, page, text=None):
+                before = agent.browser.evaluate("scrollY") if action["kind"] == "scroll" else None
+                result = execute(action, page, text=text)
+                if before is not None:
+                    wait_for_change(lambda: agent.browser.evaluate("scrollY"), before,
+                                    cap_s=args.scroll_wait_ms / 1000)
+                return result
+
+            agent.browser.act = act_then_wait_for_scroll
         try:
             for _state in agent.run():
                 ticks += 1
@@ -480,15 +570,20 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  loop error {type(exc).__name__}: {str(exc)[:200]}")
 
         final_url = agent.state["page"].get("url", "")
+        fields_ok, field_report = None, {}
         try:
             title = agent.browser.evaluate("document.title") or ""
             heading = agent.browser.evaluate("(document.querySelector('h1')||{}).textContent||''") or ""
+            if expect_fields:
+                fields_ok, field_report = fields_match(json.loads(agent.browser.evaluate(READ_FIELDS)), expect_fields)
         except Exception as exc:  # noqa: BLE001
             print(f"  could not read the live document: {type(exc).__name__}")
+            if expect_fields:
+                fields_ok = False
         history = list(agent.state["history"])
         text_calls = list(agent.state["text_calls"])
 
-    verified = outcome_verified(title, heading, final_url, args.expect)
+    verified = run_verified(title, heading, final_url, args.expect, fields_ok)
     result = {
         "schema": "jev.browser_use_run_v1",
         "goal": args.goal,
@@ -500,13 +595,17 @@ def main(argv: list[str] | None = None) -> int:
         "ticks": ticks,
         "left_allowlist": left_allowlist,
         "needs_text": needs_text,
+        "settled": settled,
         "expected": args.expect,
+        "fields": field_report,
         "verified": verified,
         "browser": "attached" if args.cdp else "owned",
     }
     print(f"  final_url: {final_url}")
     print(f"  title: {title!r}")
-    print(f"  independent check for {args.expect!r}: {'PASS' if verified else 'FAIL'}")
+    if field_report:
+        print(f"  field check: {field_report}")
+    print(f"  independent check: {'PASS' if verified else 'FAIL'}")
     if args.json:
         print(json.dumps(result))
     if left_allowlist:

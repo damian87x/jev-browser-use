@@ -227,3 +227,124 @@ class KeyFileTests(unittest.TestCase):
 
     def test_nothing_anywhere_is_absent(self):
         self.assertNotIn("TYPESAFE_API_KEY", self.resolve())
+
+
+class FakeClock:
+    def __init__(self):
+        self.now = 0.0
+
+    def time(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+
+class SettleTests(unittest.TestCase):
+    """Jev must not decide on a page that is still building itself.
+
+    Measured on a GoDaddy site: the first decision landed mid-hydration, the executor
+    rejected it as stale, and the run drifted. Wait until the page stops changing.
+    """
+
+    def settle(self, values, quiet=1.0, cap=5.0):
+        clock, reads = FakeClock(), iter(values)
+        last = [None]
+
+        def read():
+            last[0] = next(reads, last[0])
+            return last[0]
+        waited = runner.wait_until_settled(read, quiet_s=quiet, cap_s=cap, clock=clock.time, sleep=clock.sleep)
+        return waited, clock.now
+
+    def test_a_stable_page_returns_after_one_quiet_window(self):
+        settled, elapsed = self.settle(["a"] * 100)
+        self.assertTrue(settled)
+        self.assertAlmostEqual(elapsed, 1.0, delta=0.15)
+
+    def test_a_change_restarts_the_quiet_window(self):
+        settled, elapsed = self.settle(["a"] * 8 + ["b"] * 100)
+        self.assertTrue(settled)
+        self.assertGreater(elapsed, 1.6)
+
+    def test_a_page_that_never_settles_gives_up_at_the_cap(self):
+        settled, elapsed = self.settle([str(i) for i in range(1000)], cap=2.0)
+        self.assertFalse(settled)
+        self.assertAlmostEqual(elapsed, 2.0, delta=0.15)
+
+    def test_zero_cap_does_not_wait(self):
+        settled, elapsed = self.settle(["a"] * 10, cap=0)
+        self.assertEqual(elapsed, 0)
+
+
+class ScrollWaitTests(unittest.TestCase):
+    """A wheel scroll can land ~1 s after the input call returns. Observing before it
+    lands shows Jev an unmoved page, and it reasonably answers BLOCKED."""
+
+    def wait(self, values, cap=1.5):
+        clock, reads = FakeClock(), iter(values)
+        last = [None]
+
+        def read():
+            last[0] = next(reads, last[0])
+            return last[0]
+        moved = runner.wait_for_change(read, before=0, cap_s=cap, clock=clock.time, sleep=clock.sleep)
+        return moved, clock.now
+
+    def test_returns_as_soon_as_the_position_moves(self):
+        moved, elapsed = self.wait([0] * 10 + [560])
+        self.assertTrue(moved)
+        self.assertAlmostEqual(elapsed, 0.5, delta=0.1)
+
+    def test_gives_up_at_the_cap_when_nothing_moves(self):
+        moved, elapsed = self.wait([0] * 1000, cap=1.5)
+        self.assertFalse(moved)
+        self.assertAlmostEqual(elapsed, 1.5, delta=0.1)
+
+
+class TimingFlagTests(unittest.TestCase):
+    def test_defaults_are_on(self):
+        args = runner.build_parser().parse_args(["--url", "u", "--goal", "g", "--allow-hosts", "h"])
+        self.assertEqual((args.settle_max_ms, args.scroll_wait_ms), (5000, 1500))
+
+    def test_the_run_settles_before_its_first_decision(self):
+        body = SCRIPT.read_text().split("def main(", 1)[1]
+        self.assertLess(body.index("wait_until_settled("), body.index("agent.run()"))
+        self.assertIn("wait_for_change(", body)
+
+
+class ExpectFieldTests(unittest.TestCase):
+    """A filled form changes no title, heading or URL, so --expect cannot prove it.
+    --expect-field reads the live field values before the tab closes."""
+
+    OBSERVED = {"Name": "QA Test", "Email*": "qa@test.io", "Message": "hello"}
+
+    def test_every_named_field_must_hold_its_value(self):
+        ok, report = runner.fields_match(self.OBSERVED, [("Name", "QA Test"), ("email", "qa@test.io")])
+        self.assertTrue(ok)
+        self.assertEqual(report, {"Name": True, "email": True})
+
+    def test_a_wrong_value_fails(self):
+        ok, report = runner.fields_match(self.OBSERVED, [("Message", "bye")])
+        self.assertFalse(ok)
+        self.assertEqual(report, {"Message": False})
+
+    def test_a_missing_field_fails(self):
+        self.assertFalse(runner.fields_match(self.OBSERVED, [("Phone", "1")])[0])
+
+    def test_an_ambiguous_label_fails_instead_of_guessing(self):
+        self.assertFalse(runner.fields_match({"First name": "a", "Last name": "a"}, [("name", "a")])[0])
+
+    def test_no_expected_fields_is_not_a_pass(self):
+        self.assertFalse(runner.fields_match(self.OBSERVED, [])[0])
+
+    def test_fields_alone_can_verify_a_run(self):
+        self.assertTrue(runner.run_verified("t", "h", "u", expect="", fields_ok=True))
+        self.assertFalse(runner.run_verified("t", "h", "u", expect="", fields_ok=None))
+        self.assertFalse(runner.run_verified("title", "h", "u", expect="title", fields_ok=False))
+        self.assertTrue(runner.run_verified("title", "h", "u", expect="title", fields_ok=None))
+
+    def test_the_flag_is_repeatable(self):
+        args = runner.build_parser().parse_args(["--url", "u", "--goal", "g", "--allow-hosts", "h",
+                                                 "--expect-field", "A=1", "--expect-field", "B=2"])
+        self.assertEqual(args.expect_field, ["A=1", "B=2"])

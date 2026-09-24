@@ -49,6 +49,19 @@ python3 <this skill>/scripts/jev_browser_agent.py \
   --text "Search Wikipedia=Gödel's incompleteness theorems" --json
 ```
 
+**Forms: check the fields, not the title.** A filled form changes no title, heading or URL, so `--expect` cannot prove it. Add `--expect-field 'LABEL=VALUE'` (repeatable, same label matching as `--text`); the runner reads the live values before the tab closes and passes only when every one matches. The result lists each field under `"fields"`.
+
+**Timing is handled for you.** Before the first decision the runner waits until the page stops changing for 1 s (`--settle-max-ms`, default 5000), and after a scroll it waits until the page has actually moved (`--scroll-wait-ms`, default 1500). Measured on a GoDaddy site: without these, Jev's first choice landed mid-hydration and was rejected as stale, and a wheel scroll landed ~1 s after Jev had already been shown the unmoved page — 0 of 5 runs passed; with them, 3 of 3.
+
+**Say what not to click.** Put traps in the goal: a logo that reloads the page, a cookie banner that must be accepted first. Example:
+
+```bash
+python3 <this skill>/scripts/jev_browser_agent.py --url https://example.com/contact \
+  --goal "Fill in the contact form: name, email and message. Accepting the cookie banner, then scrolling down to the form, count as progress. Never click the logo or any link. Do NOT press Send." \
+  --allow-hosts example.com --text 'Name=QA Test' --text 'Email=qa@example.com' --text 'Message=QA check' \
+  --expect-field 'Name=QA Test' --expect-field 'Email=qa@example.com' --expect-field 'Message=QA check' --json
+```
+
 The TypeSafe key is read from `TYPESAFE_API_KEY` in the environment, else the nearest `.env` at or above the working directory, else `~/.pi/agent/secrets/typesafe_api_key`, else macOS Keychain. Run from the project folder and you usually need nothing else. Jev Ultrafast itself must be cloned and synced once: `git clone https://github.com/browser-use/jev-ultrafast ~/jev-ultrafast && (cd ~/jev-ultrafast && uv sync)`.
 
 ## Writing the goal: give the END STATE, not the hops

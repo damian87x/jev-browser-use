@@ -32,7 +32,8 @@ That run is real (2026-09-23, `jev-latest`). The key came from `.env`, and no te
 - **It stops instead of guessing.** If Jev picks a field you didn't name, the run stops before typing and reports `"needs_text": "<field label>"`. Re-run with that label.
 - **Its own browser.** It launches a headless Chrome on a throwaway profile and closes it on exit. Your everyday browser is never attached to.
 - **Guard rails.** `--allow-hosts` aborts the run the moment the page leaves the allowlist. `--max-ticks` caps the number of Jev calls.
-- **An independent pass.** The run passes only when `--expect` appears in the live title, `<h1>` or URL. Exit codes: 0 pass, 4 not verified, 5 left the allowlist, 2 refused to start.
+- **An independent pass.** `--expect` must appear in the live title, `<h1>` or URL. For forms, `--expect-field 'LABEL=VALUE'` reads the live field values instead. Exit codes: 0 pass, 4 not verified, 5 left the allowlist, 2 refused to start.
+- **Waits for real pages.** It waits for the page to stop changing before the first decision, and for a scroll to actually land before Jev looks again. Without this, a GoDaddy-built site failed 5 of 5 runs; with it, 3 of 3 passed.
 
 ## Install
 
@@ -71,6 +72,10 @@ You also need Chrome or Chromium; set `BH_CHROME_PATH` if it isn't found on its 
 4. macOS Keychain, service `Hermes TypeSafe API`
 
 A text-model key (`TEXT_MODEL_API_KEY`, or `OPENROUTER_API_KEY`) is optional. It's used only for fields you didn't name with `--text`.
+
+## Measured on a real site (2026-09-24)
+
+This is the contact form on [autonoxis.com](https://autonoxis.com), a GoDaddy-built site with a cookie banner that blocks scrolling. Jev accepted the banner, scrolled, filled Name, Email and Message, then chose DONE: 5 actions in 6–8 decision ticks (`jev-1.13.0`, ~220–660 ms per call), 3 of 3 runs, all confirmed by `--expect-field`. It never pressed Send. With one expected value deliberately wrong, the same run failed with exit 4. With an invalid key, TypeSafe returned 401 and zero actions ran.
 
 ## Limits
 
