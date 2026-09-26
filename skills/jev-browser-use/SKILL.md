@@ -51,6 +51,8 @@ python3 <this skill>/scripts/jev_browser_agent.py \
 
 **Forms: check the fields, not the title.** A filled form changes no title, heading or URL, so `--expect` cannot prove it. Add `--expect-field 'LABEL=VALUE'` (repeatable, same label matching as `--text`); the runner reads the live values before the tab closes and passes only when every one matches. The result lists each field under `"fields"`.
 
+**Risky clicks are refused, not just discouraged.** `--never-click REGEX` (on by default: send, submit, pay, buy, purchase, place order, checkout, delete, remove, publish, subscribe) stops the run before such a click reaches the browser, exits 4 and reports `"blocked_click": "<label>"`. A goal saying "do not press Send" is only a request; this is the guarantee. Pass `--never-click ''` or a narrower pattern only when the person explicitly approved that action.
+
 **Timing is handled for you.** Before the first decision the runner waits until the page stops changing for 1 s (`--settle-max-ms`, default 5000), and after a scroll it waits until the page has actually moved (`--scroll-wait-ms`, default 1500). Measured on a GoDaddy site: without these, Jev's first choice landed mid-hydration and was rejected as stale, and a wheel scroll landed ~1 s after Jev had already been shown the unmoved page — 0 of 5 runs passed; with them, 3 of 3.
 
 **Say what not to click.** Put traps in the goal: a logo that reloads the page, a cookie banner that must be accepted first. Example:

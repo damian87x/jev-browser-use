@@ -348,3 +348,40 @@ class ExpectFieldTests(unittest.TestCase):
         args = runner.build_parser().parse_args(["--url", "u", "--goal", "g", "--allow-hosts", "h",
                                                  "--expect-field", "A=1", "--expect-field", "B=2"])
         self.assertEqual(args.expect_field, ["A=1", "B=2"])
+
+
+class NeverClickTests(unittest.TestCase):
+    """A goal saying "do not press Send" is a request, not a guarantee. The runner
+    refuses risky clicks by label before they reach the browser."""
+
+    def blocked(self, label, pattern=runner.DEFAULT_NEVER_CLICK, kind="click"):
+        return runner.click_blocked({"kind": kind, "label": label}, pattern)
+
+    def test_the_default_blocks_consequential_buttons(self):
+        for label in ["SEND", "Submit order", "Pay now", "Delete account", "Publish", "Buy", "Checkout",
+                      "Subscribe", "Place order", "Remove"]:
+            self.assertTrue(self.blocked(label), label)
+
+    def test_the_default_leaves_ordinary_navigation_alone(self):
+        for label in ["Search", "Accept", "Next", "Rosetta Stone", "Sender name", "Orders history link",
+                      "Postcode", "Payment methods explained"]:
+            self.assertFalse(self.blocked(label), label)
+
+    def test_only_clicks_are_guarded(self):
+        self.assertFalse(self.blocked("Message", kind="fill"))
+        self.assertFalse(self.blocked("Scroll down", kind="scroll"))
+
+    def test_an_empty_pattern_disables_the_guard(self):
+        self.assertFalse(self.blocked("SEND", pattern=""))
+
+    def test_a_custom_pattern_replaces_the_default(self):
+        self.assertTrue(self.blocked("Book table", pattern=r"\bbook\b"))
+        self.assertFalse(self.blocked("SEND", pattern=r"\bbook\b"))
+
+    def test_the_default_is_on(self):
+        args = runner.build_parser().parse_args(["--url", "u", "--goal", "g", "--allow-hosts", "h"])
+        self.assertEqual(args.never_click, runner.DEFAULT_NEVER_CLICK)
+
+    def test_a_stopped_run_never_passes(self):
+        body = SCRIPT.read_text().split("def main(", 1)[1]
+        self.assertIn("and blocked_click is None", body)

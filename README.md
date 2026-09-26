@@ -32,6 +32,7 @@ That run is real (2026-09-23, `jev-latest`). The key came from `.env`, and no te
 - **It stops instead of guessing.** If Jev picks a field you didn't name, the run stops before typing and reports `"needs_text": "<field label>"`. Re-run with that label.
 - **Its own browser.** It launches a headless Chrome on a throwaway profile and closes it on exit. Your everyday browser is never attached to.
 - **Guard rails.** `--allow-hosts` aborts the run the moment the page leaves the allowlist. `--max-ticks` caps the number of Jev calls.
+- **Risky clicks are refused.** By default, clicks labelled send, submit, pay, buy, checkout, delete, publish and the like never reach the browser. The run stops and reports `blocked_click` instead. Tested on a local form whose goal said to press Send: the guarded run made 0 requests, and the control run with `--never-click ''` submitted.
 - **An independent pass.** `--expect` must appear in the live title, `<h1>` or URL. For forms, `--expect-field 'LABEL=VALUE'` reads the live field values instead. Exit codes: 0 pass, 4 not verified, 5 left the allowlist, 2 refused to start.
 - **Waits for real pages.** It waits for the page to stop changing before the first decision, and for a scroll to actually land before Jev looks again. Without this, a GoDaddy-built site failed 5 of 5 runs; with it, 3 of 3 passed.
 

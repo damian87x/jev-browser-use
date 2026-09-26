@@ -31,6 +31,7 @@ import atexit
 import contextlib
 import json
 import os
+import re
 import shutil
 import signal
 import socket
@@ -340,6 +341,26 @@ def start_owned_browser(args) -> "OwnedChrome":
     return owned
 
 
+# ── click guard ──────────────────────────────────────────────────────────────
+
+DEFAULT_NEVER_CLICK = (r"\b(send|submit|pay|buy|purchase|place order|order now|checkout|check out"
+                       r"|delete|remove|publish|subscribe)\b")
+
+
+class BlockedClick(Exception):
+    """Jev chose a click the --never-click guard refuses."""
+
+    def __init__(self, label: str):
+        super().__init__(f"refused click on {label!r}")
+        self.label = label
+
+
+def click_blocked(action: dict, pattern: str) -> bool:
+    """True when ``action`` is a click whose label matches ``pattern`` (case-insensitive)."""
+    return bool(pattern) and action.get("kind") == "click" and bool(
+        re.search(pattern, action.get("label") or "", re.IGNORECASE))
+
+
 # ── page timing ──────────────────────────────────────────────────────────────
 
 def wait_until_settled(read, quiet_s: float = 1.0, cap_s: float = 5.0,
@@ -465,6 +486,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--expect-field", action="append", default=[], metavar="LABEL=VALUE",
                    help="Field that must hold this value on the live page to PASS. Repeatable. "
                         "Use it for forms, where title/heading/URL do not change.")
+    p.add_argument("--never-click", default=DEFAULT_NEVER_CLICK, metavar="REGEX",
+                   help="Refuse any click whose label matches (case-insensitive); the run stops and "
+                        "reports blocked_click. Default blocks send/submit/pay/buy/delete/publish and "
+                        "similar. Pass '' only when the person approved those clicks.")
     p.add_argument("--settle-max-ms", type=int, default=5000,
                    help="Before the first decision, wait until the page stops changing for 1 s, "
                         "at most this long (default 5000; 0 disables).")
@@ -528,6 +553,7 @@ def main(argv: list[str] | None = None) -> int:
     ticks = 0
     left_allowlist = False
     needs_text = None
+    blocked_click = None
     settled = None
     final_url = title = heading = ""
     with Agent(args.url, args.goal) as agent:
@@ -536,18 +562,20 @@ def main(argv: list[str] | None = None) -> int:
             settled = wait_until_settled(lambda: agent.browser.evaluate(MARKER), cap_s=args.settle_max_ms / 1000)
             agent.state["page"] = agent.browser.observe(screenshot=False)
             print(f"  page {'settled' if settled else 'still changing at the cap'} before the first decision")
-        if args.scroll_wait_ms > 0:
-            execute = agent.browser.act
+        execute = agent.browser.act
 
-            def act_then_wait_for_scroll(action, page, text=None):
-                before = agent.browser.evaluate("scrollY") if action["kind"] == "scroll" else None
-                result = execute(action, page, text=text)
-                if before is not None:
-                    wait_for_change(lambda: agent.browser.evaluate("scrollY"), before,
-                                    cap_s=args.scroll_wait_ms / 1000)
-                return result
+        def guarded_act(action, page, text=None):
+            if click_blocked(action, args.never_click):
+                raise BlockedClick(action.get("label") or "")
+            scrolling = args.scroll_wait_ms > 0 and action["kind"] == "scroll"
+            before = agent.browser.evaluate("scrollY") if scrolling else None
+            result = execute(action, page, text=text)
+            if scrolling:
+                wait_for_change(lambda: agent.browser.evaluate("scrollY"), before,
+                                cap_s=args.scroll_wait_ms / 1000)
+            return result
 
-            agent.browser.act = act_then_wait_for_scroll
+        agent.browser.act = guarded_act
         try:
             for _state in agent.run():
                 ticks += 1
@@ -566,6 +594,9 @@ def main(argv: list[str] | None = None) -> int:
         except MissingText as exc:
             needs_text = exc.label
             print(f"  stopped: Jev chose to type into {exc.label!r}; re-run with --text '{exc.label}=...'")
+        except BlockedClick as exc:
+            blocked_click = exc.label
+            print(f"  stopped: refused click on {exc.label!r} (--never-click); nothing was clicked")
         except Exception as exc:  # noqa: BLE001
             print(f"  loop error {type(exc).__name__}: {str(exc)[:200]}")
 
@@ -583,7 +614,7 @@ def main(argv: list[str] | None = None) -> int:
         history = list(agent.state["history"])
         text_calls = list(agent.state["text_calls"])
 
-    verified = run_verified(title, heading, final_url, args.expect, fields_ok)
+    verified = run_verified(title, heading, final_url, args.expect, fields_ok) and blocked_click is None
     result = {
         "schema": "jev.browser_use_run_v1",
         "goal": args.goal,
@@ -595,6 +626,7 @@ def main(argv: list[str] | None = None) -> int:
         "ticks": ticks,
         "left_allowlist": left_allowlist,
         "needs_text": needs_text,
+        "blocked_click": blocked_click,
         "settled": settled,
         "expected": args.expect,
         "fields": field_report,
