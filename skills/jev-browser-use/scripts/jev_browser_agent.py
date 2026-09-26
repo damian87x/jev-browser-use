@@ -440,6 +440,18 @@ def caller_field_text(values: list[tuple[str, str]], fallback=None):
 
 # ── runner ───────────────────────────────────────────────────────────────────
 
+def stop_own_daemon(name: str, stop=None) -> bool:
+    """Stop the browser-harness daemon this run named. Best effort; never raises."""
+    try:
+        if stop is None:
+            from browser_harness.admin import restart_daemon as stop  # only stops, despite the name
+        stop(name)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+
 def ensure_importable(argv: list[str] | None = None) -> None:
     """Re-exec into the vendored venv when jev_ultrafast is not importable.
 
@@ -529,7 +541,16 @@ def main(argv: list[str] | None = None) -> int:
     # Bring up the browser AFTER ensure_importable, because that call may re-exec this
     # script into the vendored venv. A browser started before the exec is orphaned:
     # the replacement process never runs the parent's atexit handler, so it leaks.
+    # One browser-harness daemon per run: parallel runs sharing "default" crash when the
+    # first to finish shuts it down. browser_harness reads BU_NAME at import, and
+    # ensure_importable imports it, so this must come first. A caller's name wins; a
+    # re-exec keeps the parent's name. A named daemon outlives the run, so stop ours at exit.
+    if "BU_NAME" not in os.environ:
+        os.environ["BU_NAME"] = f"jev-browser-use-{os.getpid()}"
+        os.environ["JEV_BROWSER_USE_OWNS_DAEMON"] = "1"
     ensure_importable(argv)
+    if os.environ.get("JEV_BROWSER_USE_OWNS_DAEMON") == "1":
+        atexit.register(stop_own_daemon, os.environ["BU_NAME"])
 
     if args.cdp:
         os.environ["BU_CDP_WS"] = args.cdp

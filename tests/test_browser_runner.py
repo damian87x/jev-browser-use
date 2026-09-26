@@ -385,3 +385,31 @@ class NeverClickTests(unittest.TestCase):
     def test_a_stopped_run_never_passes(self):
         body = SCRIPT.read_text().split("def main(", 1)[1]
         self.assertIn("and blocked_click is None", body)
+
+
+class ParallelRunTests(unittest.TestCase):
+    """Two runs sharing browser-harness's "default" daemon crashed: the first to
+    finish shut the daemon down under the second (measured 1 of 2 parallel runs,
+    RuntimeError "daemon 'default' is unavailable"). Each run gets its own name."""
+
+    def test_each_run_names_its_own_daemon_before_the_harness_loads(self):
+        body = SCRIPT.read_text().split("def main(", 1)[1]
+        name_at = body.index('os.environ["BU_NAME"] = f"jev-browser-use-{os.getpid()}"')
+        self.assertLess(name_at, body.index("start_owned_browser(args)"))
+        # ensure_importable imports jev_ultrafast, which reads BU_NAME at import.
+        self.assertLess(name_at, body.index("ensure_importable(argv)"))
+
+    def test_a_named_daemon_is_stopped_at_exit_but_only_our_own(self):
+        """Named daemons outlive the run (measured: one leftover process per run)."""
+        body = SCRIPT.read_text().split("def main(", 1)[1]
+        self.assertIn('if "BU_NAME" not in os.environ:', body)
+        self.assertIn("atexit.register(stop_own_daemon", body)
+
+    def test_stopping_is_best_effort(self):
+        calls = []
+        self.assertTrue(runner.stop_own_daemon("n", stop=lambda name: calls.append(name)))
+        self.assertEqual(calls, ["n"])
+
+        def broken(name):
+            raise RuntimeError("daemon gone")
+        self.assertFalse(runner.stop_own_daemon("n", stop=broken))

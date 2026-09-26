@@ -1,6 +1,6 @@
 {
   "name": "jev-browser-use",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Fast browser QA for Claude Code: TypeSafe Jev picks every click through Jev Ultrafast, you supply the text and the pass condition, the page is checked independently.",
   "author": {"name": "Damian Borek"},
   "homepage": "https://github.com/damian87x/jev-browser-use",
