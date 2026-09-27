@@ -12,7 +12,9 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import json
+import os
 import re
+import signal
 import subprocess
 import time
 from pathlib import Path
@@ -58,7 +60,7 @@ def parse_run(stdout: str, exit_code: int, wall_s: float) -> dict:
     }
     try:
         data = json.loads(stdout)
-    except (json.JSONDecodeError, TypeError):
+    except (ValueError, TypeError):
         return row
     row["cost_usd"] = data.get("total_cost_usd")
     row["duration_ms"] = data.get("duration_ms")
@@ -78,15 +80,30 @@ def load_flows(path: Path) -> list:
         return json.load(fh)
 
 
-def run_once(prompt: str, cwd: str, timeout: int) -> dict:
-    """Run one claude session and parse its output. Impure; not unit-tested."""
-    cmd = ["claude", "-p", "--dangerously-skip-permissions", "--output-format", "json", prompt]
+def run_once(prompt: str, cwd: str, timeout: int, cmd: list | None = None) -> dict:
+    """Run one claude session and parse its output. Impure; not unit-tested.
+
+    cmd overrides the full command (used by tests to inject a harmless
+    stand-in); default is the real `claude -p ...` invocation for prompt.
+    """
+    if cmd is None:
+        cmd = ["claude", "-p", "--dangerously-skip-permissions", "--output-format", "json", prompt]
     start = time.monotonic()
+    proc = subprocess.Popen(
+        cmd, cwd=cwd, stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        start_new_session=True,
+    )
     try:
-        proc = subprocess.run(cmd, cwd=cwd, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=timeout)
-        stdout, exit_code = proc.stdout, proc.returncode
-    except subprocess.TimeoutExpired as exc:
-        stdout, exit_code = (exc.stdout or ""), -1
+        stdout, _ = proc.communicate(timeout=timeout)
+        exit_code = proc.returncode
+    except subprocess.TimeoutExpired:
+        # kill the whole process group, not just the direct child, so
+        # background grandchildren (browser, playwright-cli, ...) don't
+        # survive as orphans.
+        os.killpg(proc.pid, signal.SIGKILL)
+        stdout, _ = proc.communicate()
+        exit_code = -1
     return parse_run(stdout, exit_code, time.monotonic() - start)
 
 

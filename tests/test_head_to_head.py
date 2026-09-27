@@ -5,6 +5,10 @@ mimic `claude -p --output-format json` output.
 """
 import importlib.util
 import json
+import os
+import signal
+import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -89,6 +93,64 @@ class ParseRunTests(unittest.TestCase):
         self.assertIsNone(row["verdict"])
         self.assertEqual(row["exit_code"], -1)
         self.assertEqual(row["wall_s"], 600.0)
+
+    def test_non_utf8_output_does_not_raise(self):
+        # A ValueError (UnicodeDecodeError) that isn't a JSONDecodeError, e.g.
+        # from truncated multi-byte output. Must not abort pool.map.
+        row = h2h.parse_run(b'{"result": "\xff"}', 0, 1.0)
+        self.assertIsNone(row["verdict"])
+        self.assertEqual(row["exit_code"], 0)
+
+    def test_truncated_json_does_not_raise(self):
+        row = h2h.parse_run('{"result": "PATH: jev fast path\nVERDICT: PA', 1, 1.0)
+        self.assertIsNone(row["verdict"])
+        self.assertEqual(row["exit_code"], 1)
+
+
+class RunOnceProcessGroupTests(unittest.TestCase):
+    """run_once must kill the whole process group on timeout, not just the
+    direct child, so background grandchildren don't survive. Uses a harmless
+    stand-in command injected via run_once's cmd argument -- never calls
+    claude or touches the network."""
+
+    def test_timeout_kills_backgrounded_grandchild(self):
+        fd, pid_path = tempfile.mkstemp(prefix="h2h-pid-")
+        os.close(fd)
+        os.unlink(pid_path)
+        survivor_pid = None
+        try:
+            cmd = ["sh", "-c", f"sleep 30 & echo $! > {pid_path}; sleep 30"]
+            row = h2h.run_once("unused-prompt", ".", 1, cmd=cmd)
+            self.assertEqual(row["exit_code"], -1)
+
+            deadline = time.monotonic() + 2.0
+            pid_text = ""
+            while time.monotonic() < deadline and not pid_text:
+                if os.path.exists(pid_path):
+                    pid_text = Path(pid_path).read_text().strip()
+                if not pid_text:
+                    time.sleep(0.05)
+            self.assertTrue(pid_text, "background child never wrote its pid")
+            survivor_pid = int(pid_text)
+
+            alive = True
+            deadline = time.monotonic() + 2.0
+            while time.monotonic() < deadline:
+                try:
+                    os.kill(survivor_pid, 0)
+                except ProcessLookupError:
+                    alive = False
+                    break
+                time.sleep(0.05)
+            self.assertFalse(alive, "background child survived the timeout")
+        finally:
+            if os.path.exists(pid_path):
+                os.unlink(pid_path)
+            if survivor_pid is not None:
+                try:
+                    os.kill(survivor_pid, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    pass
 
 
 class FlowsFileTests(unittest.TestCase):
