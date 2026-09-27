@@ -1,0 +1,17 @@
+[
+  {
+    "id": "wiki-search",
+    "url": "https://en.wikipedia.org/wiki/Main_Page",
+    "task": "use the search box to find and open the Rosetta Stone article; pass when that article is open."
+  },
+  {
+    "id": "wiki-link",
+    "url": "https://en.wikipedia.org/wiki/Pizza",
+    "task": "reach the Italy article by clicking links only (no typing); pass when it is open."
+  },
+  {
+    "id": "autonoxis-form",
+    "url": "https://autonoxis.com/",
+    "task": "fill the contact form with Name \"QA Test\", Email \"qa-test@example.com\", Message \"Automated QA check, please ignore.\" and confirm those values are in the fields; never submit it."
+  }
+]
