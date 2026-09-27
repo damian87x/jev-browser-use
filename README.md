@@ -50,7 +50,8 @@ For a single session: `claude --plugin-dir /path/to/jev-browser-use`. The skill 
 **pi**
 
 ```bash
-pi install git:github.com/damian87x/jev-browser-use      # user-wide
+pi install npm:jev-browser-use                           # user-wide, from npm
+pi install git:github.com/damian87x/jev-browser-use      # or straight from GitHub
 pi install -l git:github.com/damian87x/jev-browser-use   # this project only
 ```
 
