@@ -413,3 +413,21 @@ class ParallelRunTests(unittest.TestCase):
         def broken(name):
             raise RuntimeError("daemon gone")
         self.assertFalse(runner.stop_own_daemon("n", stop=broken))
+
+
+class TextCallCountTests(unittest.TestCase):
+    """A --text value is stamped model="caller" so the loop can skip the fallback
+    model; it is not a text-model call, so it must not inflate text_calls."""
+
+    def test_a_mix_of_caller_and_model_entries_splits_correctly(self):
+        entries = [{"model": "caller"}, {"model": "x"}, {"model": "caller"}]
+        self.assertEqual(runner.count_text_calls(entries), (1, 2))
+
+    def test_no_entries_is_zero_and_zero(self):
+        self.assertEqual(runner.count_text_calls([]), (0, 0))
+
+    def test_main_reports_both_fields(self):
+        body = SCRIPT.read_text().split("def main(", 1)[1]
+        self.assertIn("count_text_calls(text_calls)", body)
+        self.assertIn('"text_calls": model_calls', body)
+        self.assertIn('"caller_text": caller_values', body)
