@@ -83,6 +83,10 @@ This is the contact form on [autonoxis.com](https://autonoxis.com), a GoDaddy-bu
 
 These come from Jev Ultrafast's DOM reader: no shadow roots, iframes, canvas, file uploads or pop-up tabs. A canvas game won't work; use Playwright for that. Don't point it at pages that show passwords, payment details or customer records.
 
+## Benchmark
+
+`bench/head_to_head.py` runs the same flows through `/qa-browse` twice: once on the Jev fast path, once on the plain playwright-cli loop. It records verdict, path, wall time, Claude cost and the agent's final text for each run. `bench/summarize.py` turns those rows into a table. Measured results and notes are in [bench/RESULTS.md](bench/RESULTS.md). The benchmark makes live, paid `claude -p` calls; the tests never do.
+
 ## Development
 
 ```bash

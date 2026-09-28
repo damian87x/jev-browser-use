@@ -1,0 +1,12 @@
+{"flow": "wiki-search", "mode": "jev", "rep": 1, "verdict": "PASS", "path": "jev fast path", "wall_s": 35.70741779799937, "cost_usd": 0.3989912, "duration_ms": 32424, "num_turns": 2, "exit_code": 0}
+{"flow": "wiki-search", "mode": "jev", "rep": 2, "verdict": "PASS", "path": "jev fast path", "wall_s": 33.516597443001956, "cost_usd": 0.39402279999999995, "duration_ms": 30564, "num_turns": 2, "exit_code": 0}
+{"flow": "wiki-search", "mode": "playwright", "rep": 1, "verdict": "PASS", "path": "playwright-cli fallback", "wall_s": 23.539948402001755, "cost_usd": 0.4304934, "duration_ms": 20214, "num_turns": 4, "exit_code": 0}
+{"flow": "wiki-search", "mode": "playwright", "rep": 2, "verdict": "PASS", "path": "playwright-cli fallback", "wall_s": 25.74252419000186, "cost_usd": 0.4327586, "duration_ms": 23175, "num_turns": 5, "exit_code": 0}
+{"flow": "wiki-link", "mode": "jev", "rep": 1, "verdict": "PASS", "path": "jev fast path", "wall_s": 33.43028446600147, "cost_usd": 0.3850232, "duration_ms": 30927, "num_turns": 2, "exit_code": 0}
+{"flow": "wiki-link", "mode": "jev", "rep": 2, "verdict": "PASS", "path": "jev fast path", "wall_s": 35.93392737499744, "cost_usd": 0.38691919999999996, "duration_ms": 33266, "num_turns": 2, "exit_code": 0}
+{"flow": "wiki-link", "mode": "playwright", "rep": 1, "verdict": "PASS", "path": "playwright-cli fallback", "wall_s": 71.05610853600228, "cost_usd": 0.6674114, "duration_ms": 68615, "num_turns": 16, "exit_code": 0}
+{"flow": "wiki-link", "mode": "playwright", "rep": 2, "verdict": "PASS", "path": "playwright-cli fallback", "wall_s": 36.08975615300005, "cost_usd": 0.4779978, "duration_ms": 33545, "num_turns": 7, "exit_code": 0}
+{"flow": "autonoxis-form", "mode": "jev", "rep": 1, "verdict": "PASS", "path": "both", "wall_s": 68.22641775399825, "cost_usd": 0.5409516000000001, "duration_ms": 65461, "num_turns": 7, "exit_code": 0}
+{"flow": "autonoxis-form", "mode": "jev", "rep": 2, "verdict": "PASS", "path": "both", "wall_s": 97.00128703799783, "cost_usd": 0.6731343999999999, "duration_ms": 94241, "num_turns": 13, "exit_code": 0}
+{"flow": "autonoxis-form", "mode": "playwright", "rep": 1, "verdict": "PASS", "path": "playwright-cli fallback", "wall_s": 94.13910727799885, "cost_usd": 0.7142569999999999, "duration_ms": 91632, "num_turns": 14, "exit_code": 0}
+{"flow": "autonoxis-form", "mode": "playwright", "rep": 2, "verdict": "PASS", "path": "playwright-cli fallback", "wall_s": 49.33397729200078, "cost_usd": 0.5041896000000001, "duration_ms": 46688, "num_turns": 6, "exit_code": 0}

@@ -418,6 +418,16 @@ def parse_text_values(pairs: list[str]) -> list[tuple[str, str]]:
     return parsed
 
 
+def count_text_calls(entries: list[dict]) -> tuple[int, int]:
+    """Split ``agent.state["text_calls"]`` into (text-model calls, --text values).
+
+    caller_field_text stamps a --text value with model "caller"; that is a local
+    substitution, not a call to the text model, so it must not count as one.
+    """
+    caller_values = sum(1 for entry in entries if entry.get("model") == "caller")
+    return len(entries) - caller_values, caller_values
+
+
 def caller_field_text(values: list[tuple[str, str]], fallback=None):
     """Build a replacement for jev_ultrafast's text helper.
 
@@ -636,6 +646,7 @@ def main(argv: list[str] | None = None) -> int:
         text_calls = list(agent.state["text_calls"])
 
     verified = run_verified(title, heading, final_url, args.expect, fields_ok) and blocked_click is None
+    model_calls, caller_values = count_text_calls(text_calls)
     result = {
         "schema": "jev.browser_use_run_v1",
         "goal": args.goal,
@@ -643,7 +654,8 @@ def main(argv: list[str] | None = None) -> int:
         "title": title,
         "heading": heading,
         "steps": len(history),
-        "text_calls": len(text_calls),
+        "text_calls": model_calls,
+        "caller_text": caller_values,
         "ticks": ticks,
         "left_allowlist": left_allowlist,
         "needs_text": needs_text,
