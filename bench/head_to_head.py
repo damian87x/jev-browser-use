@@ -57,6 +57,7 @@ def parse_run(stdout: str, exit_code: int, wall_s: float) -> dict:
         "duration_ms": None,
         "num_turns": None,
         "exit_code": exit_code,
+        "result_text": None,
     }
     try:
         data = json.loads(stdout)
@@ -65,6 +66,7 @@ def parse_run(stdout: str, exit_code: int, wall_s: float) -> dict:
     row["cost_usd"] = data.get("total_cost_usd")
     row["duration_ms"] = data.get("duration_ms")
     row["num_turns"] = data.get("num_turns")
+    row["result_text"] = data.get("result")
     result_text = data.get("result") or ""
     verdicts = _VERDICT_RE.findall(result_text)
     paths = _PATH_RE.findall(result_text)

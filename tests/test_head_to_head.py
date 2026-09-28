@@ -18,6 +18,11 @@ spec = importlib.util.spec_from_file_location("head_to_head", SCRIPT)
 h2h = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(h2h)
 
+SUMMARIZE_SCRIPT = ROOT / "bench" / "summarize.py"
+_summarize_spec = importlib.util.spec_from_file_location("summarize", SUMMARIZE_SCRIPT)
+summarize_mod = importlib.util.module_from_spec(_summarize_spec)
+_summarize_spec.loader.exec_module(summarize_mod)
+
 
 def claude_json(result_text, cost=0.123, duration_ms=4567, num_turns=8):
     return json.dumps({
@@ -87,12 +92,24 @@ class ParseRunTests(unittest.TestCase):
         row = h2h.parse_run("not json at all", 1, 2.0)
         self.assertIsNone(row["verdict"])
         self.assertEqual(row["exit_code"], 1)
+        self.assertIsNone(row["result_text"])
 
     def test_timeout_keeps_exit_code_and_none_verdict(self):
         row = h2h.parse_run("", -1, 600.0)
         self.assertIsNone(row["verdict"])
         self.assertEqual(row["exit_code"], -1)
         self.assertEqual(row["wall_s"], 600.0)
+        self.assertIsNone(row["result_text"])
+
+    def test_result_text_matches_result_field_exactly(self):
+        text = (
+            "some narration about the run\n\n"
+            "a multi-line explanation of what happened next,\n"
+            "spanning several lines of reasoning.\n\n"
+            "PATH: both\nVERDICT: FAIL\n"
+        )
+        row = h2h.parse_run(claude_json(text), 0, 1.0)
+        self.assertEqual(row["result_text"], text)
 
     def test_non_utf8_output_does_not_raise(self):
         # A ValueError (UnicodeDecodeError) that isn't a JSONDecodeError, e.g.
@@ -151,6 +168,22 @@ class RunOnceProcessGroupTests(unittest.TestCase):
                     os.kill(survivor_pid, signal.SIGKILL)
                 except (ProcessLookupError, PermissionError):
                     pass
+
+
+class SummarizeCompatTests(unittest.TestCase):
+    def test_summarize_works_on_rows_with_result_text(self):
+        rows = [
+            {
+                "flow": "wiki-search", "mode": "jev", "rep": 1,
+                "verdict": "PASS", "path": "jev fast path", "wall_s": 1.0,
+                "cost_usd": 0.1, "duration_ms": 100, "num_turns": 2,
+                "exit_code": 0,
+                "result_text": "narration\nPATH: jev fast path\nVERDICT: PASS\n",
+            },
+        ]
+        out = summarize_mod.summarize(rows)
+        self.assertIn("wiki-search", out)
+        self.assertIn("jev", out)
 
 
 class FlowsFileTests(unittest.TestCase):
